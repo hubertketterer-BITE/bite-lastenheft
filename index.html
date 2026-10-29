@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BITE Lastenheft-Generator</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">BITE</span><span class="brand-sub">Lastenheft &amp; ROI</span></div>
+  <div class="topbar-meta" id="topMeta"></div>
+  <div class="topbar-actions">
+    <button class="btn ghost" id="btnLoad" title="Gespeicherten Entwurf (JSON) laden">Entwurf laden</button>
+    <button class="btn ghost" id="btnSave" title="Aktuellen Stand als JSON herunterladen">Entwurf sichern</button>
+    <button class="btn ghost" id="btnReset" title="Alle Eingaben verwerfen">Neu beginnen</button>
+    <input type="file" id="fileLoad" accept=".json,application/json" hidden>
+  </div>
+</header>
+
+<nav class="stepper" id="stepper" aria-label="Schritte"></nav>
+
+<main id="main">
+  <!-- 1 Projekt -->
+  <section class="step" data-step="1">
+    <div class="step-head">
+      <h1>Projekt &amp; Kunde</h1>
+      <p class="lead">Diese Angaben landen auf dem Deckblatt und in der Einleitung des Lastenhefts.</p>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h2>Kunde</h2>
+        <label class="field"><span>Kunde / Organisation *</span><input data-bind="meta.kunde" placeholder="z.B. Musterwerke GmbH"></label>
+        <label class="field"><span>Ansprechpartner beim Kunden</span><input data-bind="meta.ansprechpartner" placeholder="HR-Abteilung / Geschäftsleitung"></label>
+        <label class="field"><span>Eingesetztes Mailsystem</span><input data-bind="meta.mailsystem" placeholder="z.B. Microsoft 365 / Outlook"></label>
+        <label class="field"><span>Bearbeitet von (BITE)</span><input data-bind="meta.bearbeiter" placeholder="Ihr Name"></label>
+        <div class="row2">
+          <label class="field"><span>Version</span><input data-bind="meta.version"></label>
+          <label class="field"><span>Datum</span><input type="date" data-bind="meta.datum"></label>
+        </div>
+        <label class="field"><span>Status</span>
+          <select data-bind="meta.status"><option>Entwurf zur Prüfung</option><option>In Abstimmung</option><option>Freigegeben</option></select>
+        </label>
+      </div>
+      <div class="card">
+        <h2>Module</h2>
+        <p class="hint">Steuert, welche Anforderungen, Rollen und ROI-Bereiche enthalten sind.</p>
+        <div class="module-pick" id="modulePick">
+          <label class="module"><input type="checkbox" data-module="R"><span class="module-box"><strong>Bewerbermanagement</strong><small>Recruiting, Bewerbungsformulare, Talentpool, KI-Funktionen</small></span></label>
+          <label class="module"><input type="checkbox" data-module="P"><span class="module-box"><strong>Personalmanagement</strong><small>Digitale Personalakte, On-/Offboarding, Fristen, Dokumente</small></span></label>
+        </div>
+        <h2 class="mt">Zeitplan (geplant)</h2>
+        <div class="row2">
+          <label class="field"><span>Ausschreibung / Marktanalyse</span><input data-bind="meta.zeitplan.markt" placeholder="z.B. Q1 2027"></label>
+          <label class="field"><span>Anbieterbewertung / Demo</span><input data-bind="meta.zeitplan.demo"></label>
+          <label class="field"><span>Vertragsabschluss</span><input data-bind="meta.zeitplan.vertrag"></label>
+          <label class="field"><span>Go-Live</span><input data-bind="meta.zeitplan.golive"></label>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Einleitung &amp; Projektziel</h2><span class="hint">Texte sind vorbelegt und können angepasst werden. <code>{{kunde}}</code> und <code>{{mailsystem}}</code> werden automatisch ersetzt.</span></div>
+      <div id="introList" class="intro-list"></div>
+    </div>
+  </section>
+
+  <!-- 2 Stakeholder -->
+  <section class="step" data-step="2">
+    <div class="step-head">
+      <h1>Stakeholder &amp; Rollen</h1>
+      <p class="lead">Wählen Sie die Rollen, die beim Kunden beteiligt sind. Texte lassen sich direkt anpassen.</p>
+    </div>
+    <div id="stakeList" class="stake-grid"></div>
+  </section>
+
+  <!-- 3 Anforderungen -->
+  <section class="step" data-step="3">
+    <div class="step-head">
+      <h1>Anforderungen</h1>
+      <p class="lead">Anforderungen an- oder abwählen, Priorität und Gewichtung setzen, BITE-Erfüllung pflegen und eigene Punkte ergänzen.</p>
+    </div>
+    <div class="req-layout">
+      <aside class="sheet-tabs" id="sheetTabs"></aside>
+      <div class="req-main">
+        <div class="toolbar">
+          <input type="search" id="reqSearch" placeholder="Anforderungen durchsuchen …" aria-label="Suche">
+          <select id="fPrio" aria-label="Priorität filtern"><option value="">Alle Prioritäten</option><option>MUSS</option><option>SOLL</option><option>KANN</option></select>
+          <select id="fStatus" aria-label="Status filtern"><option value="">Alle BITE-Status</option></select>
+          <select id="fOn" aria-label="Auswahl filtern"><option value="">Aktive und abgewählte</option><option value="on">Nur aktive</option><option value="off">Nur abgewählte</option></select>
+        </div>
+        <div class="sheet-summary" id="sheetSummary"></div>
+        <div id="reqList"></div>
+        <div class="add-req card" id="addReq">
+          <h3>Eigene Anforderung ergänzen</h3>
+          <div class="add-grid">
+            <label class="field"><span>Kategorie</span><input id="newCat" list="catList" placeholder="Kategorie wählen oder neu eingeben"></label>
+            <datalist id="catList"></datalist>
+            <label class="field"><span>Priorität</span><select id="newPrio"><option>MUSS</option><option>SOLL</option><option>KANN</option></select></label>
+            <label class="field wide"><span>Beschreibung</span><textarea id="newDesc" rows="2" placeholder="Was muss die Software können?"></textarea></label>
+          </div>
+          <button class="btn primary" id="btnAddReq">Hinzufügen</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 ROI -->
+  <section class="step" data-step="4">
+    <div class="step-head">
+      <h1>ROI-Rechner</h1>
+      <p class="lead">Kennzahlen des Kunden eintragen. Ergebnis und Grafiken aktualisieren sich sofort.</p>
+    </div>
+    <div class="roi-layout">
+      <div class="card roi-inputs">
+        <h2>Kennzahlen</h2>
+        <div class="toggle-row" id="roiModules"></div>
+        <div class="inputs-grid" id="roiInputs"></div>
+        <p class="hint" id="lohnHint"></p>
+      </div>
+      <div class="roi-results">
+        <div class="kpis" id="roiKpis"></div>
+        <div class="card"><div class="card-head"><h2>Kosten und Einsparungen kumuliert</h2></div><div id="roiLine" class="chart"></div><div id="roiTable"></div></div>
+        <div class="card"><div class="card-head"><h2>Einsparung pro Prozessbereich (p.a.)</h2></div><div id="roiBars" class="chart"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <details id="roiDetails">
+        <summary><h2>Zeitansätze pro Prozess anpassen</h2><span class="hint">Minuten je Vorgang heute und mit Software. Einzelne Prozesse lassen sich abwählen.</span></summary>
+        <div id="roiProcs"></div>
+      </details>
+    </div>
+  </section>
+
+  <!-- 5 Ergebnis -->
+  <section class="step" data-step="5">
+    <div class="step-head no-print">
+      <h1>Ergebnis &amp; Export</h1>
+      <p class="lead">Überblick prüfen, dann als Excel herunterladen oder den Ergebnisbericht als PDF drucken.</p>
+    </div>
+    <div class="card export-card no-print">
+      <div class="export-opts">
+        <fieldset>
+          <legend>Variante</legend>
+          <label class="radio"><input type="radio" name="variant" value="neutral" checked><span><strong>Neutral</strong><small>Für die Ausschreibung an Anbieter: leere Spalten für deren Antworten</small></span></label>
+          <label class="radio"><input type="radio" name="variant" value="bite"><span><strong>Mit BITE-Erfüllung</strong><small>BITE-Status und Anmerkungen sind vorausgefüllt</small></span></label>
+        </fieldset>
+        <fieldset>
+          <legend>Inhalt</legend>
+          <label class="check"><input type="checkbox" id="optRoi" checked><span>ROI-Rechner mit aktiven Formeln anhängen</span></label>
+          <label class="check"><input type="checkbox" id="optOff"><span>Abgewählte Anforderungen als „nicht relevant“ mit ausgeben</span></label>
+        </fieldset>
+      </div>
+      <div class="export-actions">
+        <button class="btn primary big" id="btnXlsx">Excel herunterladen (.xlsx)</button>
+        <button class="btn big" id="btnPrint">Ergebnisbericht drucken / PDF</button>
+      </div>
+      <p class="hint" id="exportMsg" role="status"></p>
+    </div>
+    <div id="report" class="report"></div>
+  </section>
+</main>
+
+<footer class="stepfoot no-print">
+  <button class="btn" id="btnPrev">Zurück</button>
+  <span class="autosave" id="autosave">Eingaben werden in diesem Browser zwischengespeichert</span>
+  <button class="btn primary" id="btnNext">Weiter</button>
+</footer>
+
+<div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+
+<script src="data.js"></script>
+<script src="charts.js"></script>
+<script src="app.js"></script>
+<script src="export.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+</body>
+</html>
