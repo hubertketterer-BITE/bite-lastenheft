@@ -264,7 +264,9 @@
         <div class="cat-body">${rows.map(([r, i]) => reqRow(r, i)).join('')}</div></div>`;
     }).join('') : '<div class="empty card">Keine Anforderungen passen zu den Filtern.</div>';
     $('#catList').innerHTML = [...new Set(sh.reqs.map(r => r.cat))].map(c => `<option value="${esc(c)}">`).join('');
+    $('#bulkInfo').textContent = `Gilt für alle ${allActiveReqs().length} aktiven Anforderungen in allen Kapiteln und Kategorien – unabhängig von Suche und Filtern.`;
   }
+  const allActiveReqs = () => S.sheets.filter(sheetVisible).flatMap(activeReqs);
   function rerenderRow(rowEl, sh) {
     const i = +rowEl.dataset.idx;
     rowEl.outerHTML = reqRow(sh.reqs[i], i);
@@ -326,6 +328,18 @@
     const b = e.target.closest('[data-bulk]');
     if (!b) return;
     curSheet().reqs.forEach(r => { if (visibleModule(r.module)) r.on = b.dataset.bulk === 'on'; });
+    renderReqs(); save();
+  });
+  $('#bulkBar').addEventListener('click', e => {
+    const b = e.target.closest('[data-bulkstatus]');
+    if (!b) return;
+    const reqs = allActiveReqs(), key = b.dataset.bulkstatus;
+    if (!reqs.length) { alert('Es sind keine aktiven Anforderungen vorhanden.'); return; }
+    const rated = reqs.filter(r => r.status !== 'offen' && r.status !== key).length;
+    if (!confirm(`Alle ${reqs.length} aktiven Anforderungen in allen Kapiteln und Kategorien als „${ST[key].label}“ markieren?` +
+      (rated ? `\n\n${rated} bereits abweichend bewertete Anforderungen werden dabei überschrieben.` : '') +
+      '\n\nAbgewählte Anforderungen und Notizen bleiben unverändert.')) return;
+    reqs.forEach(r => { r.status = key; });
     renderReqs(); save();
   });
   ['#reqSearch', '#fPrio', '#fStatus', '#fOn'].forEach(s => $(s).addEventListener('input', renderReqs));

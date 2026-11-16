@@ -153,6 +153,10 @@ textarea { resize: vertical; }
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .toolbar input[type=search] { flex: 1 1 240px; }
 .toolbar select { width: auto; flex: 0 0 auto; }
+.bulk-bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 8px 12px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 13px; color: var(--text-2); }
+.bulk-bar .bulk-info { display: flex; flex-wrap: wrap; gap: 2px 10px; flex: 1 1 280px; }
+.bulk-bar .bulk-info strong { color: var(--text); }
+.bulk-bar .actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
 .sheet-summary { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; color: var(--text-2); margin-bottom: 10px; align-items: center; }
 .sheet-summary .actions { margin-left: auto; display: flex; gap: 6px; }
 
