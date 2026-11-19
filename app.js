@@ -11,7 +11,7 @@
     { key: 'offen', label: 'Noch nicht bewertet', color: 'var(--neutral)', score: null },
   ];
   const ST = Object.fromEntries(STATUS.map(s => [s.key, s]));
-  const SHORT_TITLE = { rec: 'Funktional Recruiting', per: 'Funktional Personal', nfa: 'Nicht-funktional', ta: 'Technik', ra: 'Recht & Compliance', si: 'Schnittstellen', ki: 'KI', sec: 'Sicherheit', se: 'Service & Implementierung' };
+  const SHORT_TITLE = { gen: 'Funktional Allgemein', rec: 'Funktional Recruiting', per: 'Funktional Personal', nfa: 'Nicht-funktional', ta: 'Technik', ra: 'Recht & Compliance', si: 'Schnittstellen', ki: 'KI', sec: 'Sicherheit', se: 'Service & Implementierung' };
   const STEPS = ['Projekt & Kunde', 'Stakeholder', 'Anforderungen', 'ROI-Rechner', 'Ergebnis & Export'];
   const DRIVERS = {
     stellen: 'Stellenausschreibungen p.a.', bewerbungen: 'Bewerbungseingänge p.a.', neueinst: 'Neueinstellungen p.a.',
@@ -45,7 +45,7 @@
   // ---------------------------------------------------------------- state
   function freshState() {
     return {
-      v: 1,
+      v: 2,
       step: 1,
       meta: {
         kunde: '', ansprechpartner: 'HR-Abteilung / Geschäftsleitung', mailsystem: '', bearbeiter: '', version: '1.0',
@@ -69,7 +69,31 @@
   }
   let S;
   try { S = JSON.parse(localStorage.getItem(STORE)); } catch (e) { S = null; }
-  if (!S || S.v !== 1) S = freshState();
+  S = migrate(S);
+
+  // Entwürfe älterer Datenstände übernehmen: Kundendaten, Module, ROI und Varianten bleiben,
+  // Auswahl/Priorität/Gewichtung/Status/Notizen werden per ID (inkl. umgezogener IDs) übertragen,
+  // eigene Anforderungen bleiben im jeweiligen Kapitel erhalten. Rollen und Texte kommen aus dem neuen Stand.
+  function migrate(old) {
+    if (!old || !old.sheets) return freshState();
+    if (old.v === 2) return old;
+    if (old.v !== 1) return freshState();
+    const n = freshState(), idMap = D.idMap || {};
+    ['step', 'meta', 'modules', 'roi', 'variant'].forEach(k => { if (old[k] !== undefined) n[k] = old[k]; });
+    const oldIntro = Object.fromEntries((old.intro || []).map(i => [i.title, i.text]));
+    n.intro.forEach(i => { if (i.title !== 'Erwarteter Nutzen' && i.title !== 'Beteiligte Abteilungen' && oldIntro[i.title] != null) i.text = oldIntro[i.title]; });
+    const prev = new Map();
+    old.sheets.forEach(sh => sh.reqs.forEach(r => { if (!r.custom) prev.set(idMap[r.id] || r.id, r); }));
+    n.sheets.forEach(sh => sh.reqs.forEach(r => {
+      const o = prev.get(r.id);
+      if (o) ['on', 'prio', 'weight', 'wManual', 'status', 'note'].forEach(k => { if (o[k] !== undefined) r[k] = o[k]; });
+    }));
+    old.sheets.forEach(sh => {
+      const t = n.sheets.find(x => x.key === sh.key);
+      if (t) t.reqs.push(...sh.reqs.filter(r => r.custom));
+    });
+    return n;
+  }
 
   let saveTimer;
   function save() {
@@ -84,7 +108,8 @@
   const set = (path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], S)[last] = v; };
 
   // ---------------------------------------------------------------- helpers shared with export
-  const visibleModule = m => m === 'A' || (m === 'R' && S.modules.R) || (m === 'P' && S.modules.P);
+  // 'RO' = gespiegelte Personal-Anforderungen im Recruiting, nur wenn das Personal-Modul nicht gewählt ist
+  const visibleModule = m => m === 'A' || (m === 'R' && S.modules.R) || (m === 'P' && S.modules.P) || (m === 'RO' && S.modules.R && !S.modules.P);
   const sheetVisible = sh => sh.reqs.some(r => visibleModule(r.module));
   const activeReqs = sh => sh.reqs.filter(r => visibleModule(r.module) && r.on);
   const fillText = t => t.replace(/\{\{kunde\}\}/g, S.meta.kunde || 'Der Auftraggeber').replace(/\{\{mailsystem\}\}/g, S.meta.mailsystem || '(Mailsystem)');
@@ -228,8 +253,8 @@
     if (q && !(r.desc + ' ' + r.cat + ' ' + r.id + ' ' + r.note).toLowerCase().includes(q)) return false;
     return true;
   }
-  function reqRow(r, idx) {
-    return `<div class="req ${r.on ? '' : 'off'}" data-idx="${idx}">
+  function reqRow(r, idx, key) {
+    return `<div class="req ${r.on ? '' : 'off'}" data-idx="${idx}" data-sheet="${key}">
       <div class="req-check"><input type="checkbox" data-act="on" ${r.on ? 'checked' : ''} aria-label="${esc(r.id)} einbeziehen"></div>
       <div class="req-id">${esc(r.id)}</div>
       <div class="req-desc"><span class="text" data-act="edit" title="Klicken zum Bearbeiten">${esc(r.desc)}</span>${r.custom ? '<span class="custom">EIGENE</span>' : ''}
@@ -246,36 +271,49 @@
     const sh = curSheet();
     renderTabs();
     const q = $('#reqSearch').value.trim().toLowerCase(), fp = $('#fPrio').value, fs = $('#fStatus').value, fo = $('#fOn').value;
+    // mit Suchbegriff wird über alle sichtbaren Kapitel gesucht, sonst nur im gewählten Kapitel
+    const global = !!q;
+    const scope = global ? S.sheets.filter(sheetVisible) : [sh];
     const cats = new Map();
-    sh.reqs.forEach((r, i) => {
+    let hits = 0;
+    scope.forEach(x => x.reqs.forEach((r, i) => {
       if (!visibleModule(r.module) || !reqMatches(r, q, fp, fs, fo)) return;
-      if (!cats.has(r.cat)) cats.set(r.cat, []);
-      cats.get(r.cat).push([r, i]);
-    });
+      const key = x.key + '|' + r.cat;
+      if (!cats.has(key)) cats.set(key, { sh: x, cat: r.cat, rows: [] });
+      cats.get(key).rows.push([r, i]);
+      hits++;
+    }));
     const act = activeReqs(sh), st = stats(act);
-    $('#sheetSummary').innerHTML = `<strong>${esc(sh.title)}</strong><span>${act.length} aktiv</span><span>${st.muss} MUSS</span><span>${st.st.erfuellt + st.st.aufpreis} von ${act.length} durch BITE erfüllt</span>${st.st.offen ? `<span>${st.st.offen} noch nicht bewertet</span>` : ''}
+    if (global) {
+      const nSheets = new Set([...cats.values()].map(c => c.sh.key)).size;
+      $('#sheetSummary').innerHTML = `<strong>Suche in allen Kapiteln</strong><span>${hits} Treffer${hits ? ` in ${nSheets} ${nSheets === 1 ? 'Kapitel' : 'Kapiteln'}` : ''}</span>
+        <span class="actions"><button class="btn small" data-clearsearch>Suche zurücksetzen</button></span>`;
+    } else {
+      $('#sheetSummary').innerHTML = `<strong>${esc(sh.title)}</strong><span>${act.length} aktiv</span><span>${st.muss} MUSS</span><span>${st.st.erfuellt + st.st.aufpreis} von ${act.length} durch BITE erfüllt</span>${st.st.offen ? `<span>${st.st.offen} noch nicht bewertet</span>` : ''}
       <span class="actions"><button class="btn small" data-bulk="on">Alle an</button><button class="btn small" data-bulk="off">Alle aus</button></span>`;
-    $('#reqList').innerHTML = cats.size ? [...cats].map(([cat, rows]) => {
-      const key = sh.key + '|' + cat;
+    }
+    $('#reqList').innerHTML = cats.size ? [...cats].map(([key, { sh: x, cat, rows }]) => {
       const on = rows.filter(([r]) => r.on).length;
-      return `<div class="cat ${collapsed.has(key) ? 'collapsed' : ''}" data-cat="${esc(cat)}">
-        <div class="cat-head" data-act="toggle" data-key="${esc(key)}"><span class="chev">▾</span><h3>${esc(cat || 'Ohne Kategorie')}</h3><span class="count">${on}/${rows.length} aktiv</span>
+      const label = global ? `<span class="cat-sheet">${esc(SHORT_TITLE[x.key] || x.title)}</span>${esc(cat || 'Ohne Kategorie')}` : esc(cat || 'Ohne Kategorie');
+      return `<div class="cat ${collapsed.has(key) ? 'collapsed' : ''}" data-cat="${esc(cat)}" data-sheet="${x.key}">
+        <div class="cat-head" data-act="toggle" data-key="${esc(key)}"><span class="chev">▾</span><h3>${label}</h3><span class="count">${on}/${rows.length} aktiv</span>
           <button class="btn small" data-act="catall" data-v="${on === rows.length ? 'off' : 'on'}">${on === rows.length ? 'Kategorie aus' : 'Kategorie an'}</button></div>
-        <div class="cat-body">${rows.map(([r, i]) => reqRow(r, i)).join('')}</div></div>`;
-    }).join('') : '<div class="empty card">Keine Anforderungen passen zu den Filtern.</div>';
+        <div class="cat-body">${rows.map(([r, i]) => reqRow(r, i, x.key)).join('')}</div></div>`;
+    }).join('') : `<div class="empty card">${global ? 'Keine Anforderung in allen Kapiteln passt zur Suche.' : 'Keine Anforderungen passen zu den Filtern.'}</div>`;
     $('#catList').innerHTML = [...new Set(sh.reqs.map(r => r.cat))].map(c => `<option value="${esc(c)}">`).join('');
     $('#bulkInfo').textContent = `Gilt für alle ${allActiveReqs().length} aktiven Anforderungen in allen Kapiteln und Kategorien – unabhängig von Suche und Filtern.`;
   }
+  const sheetOf = el => S.sheets.find(x => x.key === el.closest('[data-sheet]').dataset.sheet);
   const allActiveReqs = () => S.sheets.filter(sheetVisible).flatMap(activeReqs);
   function rerenderRow(rowEl, sh) {
     const i = +rowEl.dataset.idx;
-    rowEl.outerHTML = reqRow(sh.reqs[i], i);
+    rowEl.outerHTML = reqRow(sh.reqs[i], i, sh.key);
     renderTabs();
   }
   $('#reqList').addEventListener('click', e => {
     const a = e.target.closest('[data-act]');
     if (!a) return;
-    const sh = curSheet();
+    const sh = sheetOf(a);
     const act = a.dataset.act;
     if (act === 'toggle' && !e.target.closest('button')) {
       const k = a.dataset.key;
@@ -313,7 +351,7 @@
     const a = e.target.closest('[data-act]');
     const rowEl = e.target.closest('.req');
     if (!a || !rowEl) return;
-    const sh = curSheet(), r = sh.reqs[+rowEl.dataset.idx];
+    const sh = sheetOf(rowEl), r = sh.reqs[+rowEl.dataset.idx];
     if (a.dataset.act === 'on') { r.on = a.checked; rerenderRow(rowEl, sh); }
     if (a.dataset.act === 'status') { r.status = a.value; rerenderRow(rowEl, sh); }
     if (a.dataset.act === 'weight') { r.weight = Math.max(0, +a.value || 0); r.wManual = r.weight !== WEIGHT[r.prio]; a.classList.toggle('manual', r.wManual); }
@@ -322,9 +360,10 @@
   });
   $('#sheetTabs').addEventListener('click', e => {
     const b = e.target.closest('[data-sheet]');
-    if (b) { S.sheetSel = b.dataset.sheet; renderReqs(); save(); }
+    if (b) { S.sheetSel = b.dataset.sheet; $('#reqSearch').value = ''; renderReqs(); save(); }
   });
   $('#sheetSummary').addEventListener('click', e => {
+    if (e.target.closest('[data-clearsearch]')) { $('#reqSearch').value = ''; renderReqs(); return; }
     const b = e.target.closest('[data-bulk]');
     if (!b) return;
     curSheet().reqs.forEach(r => { if (visibleModule(r.module)) r.on = b.dataset.bulk === 'on'; });
@@ -505,8 +544,8 @@
     if (!f) return;
     try {
       const obj = JSON.parse(await f.text());
-      if (obj.v !== 1 || !obj.sheets) throw new Error('format');
-      S = obj; init();
+      if ((obj.v !== 1 && obj.v !== 2) || !obj.sheets) throw new Error('format');
+      S = migrate(obj); init();
     } catch (err) { alert('Die Datei ist kein gültiger Lastenheft-Entwurf.'); }
     e.target.value = '';
   });

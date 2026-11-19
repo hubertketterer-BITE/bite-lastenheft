@@ -2,7 +2,7 @@
 (function () {
   const BRAND = 'FF0F2F57', BRAND_LIGHT = 'FFE8F1FC', LINE = 'FFD9D8D2', GREY = 'FF8A8984';
   const SHORT = {
-    rec: 'Funktional Recruiting', per: 'Funktional Personal', nfa: 'Nicht-funktional', ta: 'Technik', ra: 'Recht & Compliance',
+    gen: 'Funktional Allgemein', rec: 'Funktional Recruiting', per: 'Funktional Personal', nfa: 'Nicht-funktional', ta: 'Technik', ra: 'Recht & Compliance',
     si: 'Schnittstellen', ki: 'KI', sec: 'Sicherheit', se: 'Service & Implementierung',
   };
   const STATUS_LABEL = { erfuellt: 'Erfüllt', aufpreis: 'Gegen Aufpreis', teilweise: 'Teilweise', nicht: 'Nicht erfüllt', offen: 'Offen' };
